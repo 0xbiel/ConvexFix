@@ -11,17 +11,18 @@ import "src/PoolRewardHook.sol";
 import "src/RewardManager.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "lib/forge-std/src/StdUtils.sol";
+import "lib/forge-std/src/console.sol";
 
 contract TestContract is Test {
     uint256 public arbitrumFork;
 
-    ConvexRewardPool public c;
+    ConvexRewardPool public convexRewardPool;
     ConvexRewardPool public template;
-    PoolManager public p;
-    Booster public b;
-    RewardFactory public f;
-    PoolRewardHook public rh;
-    RewardManager public rm;
+    PoolManager public poolManager;
+    Booster public booster;
+    RewardFactory public rewardFactory;
+    PoolRewardHook public rewardHook;
+    RewardManager public rewardManager;
 
     IERC20 public _crv;
     address public _curveGauge = 0x5839337bf070Fea56595A5027e83Cd7126b23884;
@@ -33,65 +34,68 @@ contract TestContract is Test {
 
     function setUp() public {
         arbitrumFork = vm.createSelectFork("https://arb1.arbitrum.io/rpc");
-        vm.startPrank(0x2CA7759dcE155e15dF9cDBd8322C8Eb2934c5558);
         _crv = IERC20(0x11cDb42B0EB46D95f990BeDD4695A6e3fA034978);
         _lptoken = IERC20(0xF7Fed8Ae0c5B78c19Aadd68b700696933B0Cefd9);
-        b = Booster(_convexBooster);
-        p = PoolManager(0x3CeeAd93972703a4668EcD9FcAB5b99C8fa39ae3);
-        f = new RewardFactory(
+        booster = Booster(_convexBooster);
+
+        vm.startPrank(0x2CA7759dcE155e15dF9cDBd8322C8Eb2934c5558);
+        poolManager = PoolManager(0x3CeeAd93972703a4668EcD9FcAB5b99C8fa39ae3);
+        rewardFactory = new RewardFactory(
             _convexBooster,
             _convexStaker,
             0xf53173a3104bFdC4eD2FA579089B5e6Bf4fc7a2b
         );
         template = new ConvexRewardPool();
-        b.setRewardFactory(address(f));
-        rm = RewardManager(b.rewardManager());
+        booster.setRewardFactory(address(rewardFactory));
+        rewardManager = RewardManager(booster.rewardManager());
         vm.stopPrank();
-        vm.startPrank(rm.owner());
-        rh = new PoolRewardHook(_convexBooster);
-        rm.setPoolHook(address(rh));
+
+        vm.startPrank(rewardManager.owner());
+        rewardHook = new PoolRewardHook(_convexBooster);
+        rewardManager.setPoolHook(address(rewardHook));
         vm.stopPrank();
-        vm.startPrank(address(b.owner()));
-        f.setImplementation(address(template));
-        vm.stopPrank();
+
+        vm.prank(address(booster.owner()));
+        rewardFactory.setImplementation(address(template));
+
         vm.startPrank(0x947B7742C403f20e5FaCcDAc5E092C943E7D0277);
-        p.shutdownPool(15);
-        p.addPool(_curveGauge, _factory);
-        (, , address rewards, , ) = b.poolInfo(b.poolLength() - 1);
-        c = ConvexRewardPool(rewards);
+        poolManager.shutdownPool(15);
+        poolManager.addPool(_curveGauge, _factory);
+        (, , address rewards, , ) = booster.poolInfo(booster.poolLength() - 1);
+        convexRewardPool = ConvexRewardPool(rewards);
     }
 
     function testSetPool() public view {
-        assertEq(b.poolLength(), 29);
+        assertEq(booster.poolLength(), 29);
     }
 
     function testDeposit() public {
         vm.startPrank(address(1));
         deal(address(_lptoken), address(address(1)), 10 ether);
         IERC20(_lptoken).approve(
-            address(b),
+            address(booster),
             IERC20(_lptoken).balanceOf(address(1))
         );
-        b.depositAll(28);
+        booster.depositAll(28);
     }
 
     function testClaimRewards() public {
         vm.warp(block.number + 1 days);
-        c.getReward(address(1));
+        convexRewardPool.getReward(address(1));
     }
 
     function testWithdrawWithClaim() public {
-        c.withdrawAll(true);
+        convexRewardPool.withdrawAll(true);
     }
 
     function testWithdrawWithoutClaim() public {
         vm.startPrank(address(1));
         deal(address(_lptoken), address(address(1)), 10 ether);
         IERC20(_lptoken).approve(
-            address(b),
+            address(booster),
             IERC20(_lptoken).balanceOf(address(1))
         );
-        b.depositAll(28);
-        c.withdrawAll(false);
+        booster.depositAll(28);
+        convexRewardPool.withdrawAll(false);
     }
 }
