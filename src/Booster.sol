@@ -8,15 +8,15 @@ import "./interfaces/IFeeDistro.sol";
 import "./interfaces/IPoolFactory.sol";
 import "./interfaces/IRewardManager.sol";
 import "./interfaces/ITokenMinter.sol";
-import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
-import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /*
 This is the main contract which will have operator role on the VoterProxy.
 Handles pool creation, deposits/withdraws, as well as other managment functions like factories/managers/fees
 */
-contract Booster is ReentrancyGuard{
+contract Booster is ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     uint256 public fees = 1700; //platform fees
@@ -43,14 +43,21 @@ contract Booster is ReentrancyGuard{
         address factory; //a reference to the curve factory used to create this pool (needed for minting crv)
     }
 
-
-    PoolInfo[] public poolInfo;//list of convex pools, index(pid) -> pool
-    mapping(address => address) public factoryCrv;//map defining CRV token used by a Curve factory
-    mapping(address => bool) public activeMap;//map defining if a curve gauge/lp token is already being used or not
+    PoolInfo[] public poolInfo; //list of convex pools, index(pid) -> pool
+    mapping(address => address) public factoryCrv; //map defining CRV token used by a Curve factory
+    mapping(address => bool) public activeMap; //map defining if a curve gauge/lp token is already being used or not
     mapping(uint256 => uint256) public shutdownBalances; //lp balances of a shutdown pool, index(pid) -> lp balance
 
-    event Deposited(address indexed user, uint256 indexed poolid, uint256 amount);
-    event Withdrawn(address indexed user, uint256 indexed poolid, uint256 amount);
+    event Deposited(
+        address indexed user,
+        uint256 indexed poolid,
+        uint256 amount
+    );
+    event Withdrawn(
+        address indexed user,
+        uint256 indexed poolid,
+        uint256 amount
+    );
     event SetPendingOwner(address indexed _address);
     event OwnerChanged(address indexed _address);
     event CrvFactorySet(address indexed _factory, address _crv);
@@ -66,8 +73,8 @@ contract Booster is ReentrancyGuard{
         rescueManager = msg.sender;
     }
 
-    function _proxyCall(address _to, bytes memory _data) internal{
-        (bool success,) = IStaker(staker).execute(_to,uint256(0),_data);
+    function _proxyCall(address _to, bytes memory _data) internal {
+        (bool success, ) = IStaker(staker).execute(_to, uint256(0), _data);
         require(success, "Proxy Call Fail");
     }
 
@@ -104,7 +111,7 @@ contract Booster is ReentrancyGuard{
     //note: only the pool manager can relinquish control
     function setPoolManager(address _poolM) external {
         require(msg.sender == poolManager, "!auth");
-        require(_poolM != address(0),"invalid address");
+        require(_poolM != address(0), "invalid address");
         poolManager = _poolM;
     }
 
@@ -112,7 +119,7 @@ contract Booster is ReentrancyGuard{
     //note: only the mint manager can relinquish control
     function setMintManager(address _mintM) external {
         require(msg.sender == mintManager, "!auth");
-        require(_mintM != address(0),"invalid address");
+        require(_mintM != address(0), "invalid address");
         mintManager = _mintM;
     }
 
@@ -127,7 +134,10 @@ contract Booster is ReentrancyGuard{
     //can add extra rewards and reward hooks on pools
     function setRewardManager(address _rewardM) external {
         require(msg.sender == owner, "!auth");
-        require(IRewardManager(_rewardM).rewardHook() != address(0), "!no hook");
+        require(
+            IRewardManager(_rewardM).rewardHook() != address(0),
+            "!no hook"
+        );
         require(IRewardManager(_rewardM).cvx() != address(0), "!no cvx");
 
         rewardManager = _rewardM;
@@ -137,20 +147,20 @@ contract Booster is ReentrancyGuard{
     function setRewardFactory(address _rfactory) external {
         require(msg.sender == owner, "!auth");
         require(rewardFactory == address(0), "sealed");
-        
+
         rewardFactory = _rfactory;
     }
 
     //set address that receives platform fees
     function setFeeDeposit(address _deposit) external {
         require(msg.sender == owner, "!auth");
-        
+
         feeDeposit = _deposit;
         emit FeeDepositChanged(_deposit);
     }
 
     //set platform fees
-    function setFees(uint256 _platformFees) external{
+    function setFees(uint256 _platformFees) external {
         require(msg.sender == owner, "!auth");
         require(_platformFees <= MaxFees, ">MaxFees");
 
@@ -160,16 +170,24 @@ contract Booster is ReentrancyGuard{
 
     //rescue a token from the voter proxy
     //token must not be an lp or gauge token
-    function rescueToken(address _token, address _to) external{
-        require(msg.sender==rescueManager, "!auth");
+    function rescueToken(address _token, address _to) external {
+        require(msg.sender == rescueManager, "!auth");
 
         IStaker(staker).rescue(_token, _to);
     }
 
-    function setTokenMinterOperator(address _token, address _minter, bool _active) external{
-        require(msg.sender==mintManager, "!auth");
+    function setTokenMinterOperator(
+        address _token,
+        address _minter,
+        bool _active
+    ) external {
+        require(msg.sender == mintManager, "!auth");
 
-        bytes memory data = abi.encodeWithSelector(bytes4(keccak256("setOperator(address,bool)")), _minter, _active);
+        bytes memory data = abi.encodeWithSelector(
+            bytes4(keccak256("setOperator(address,bool)")),
+            _minter,
+            _active
+        );
         _proxyCall(_token, data);
     }
 
@@ -181,24 +199,41 @@ contract Booster is ReentrancyGuard{
     }
 
     //create a new pool
-    function addPool(address _lptoken, address _gauge, address _factory) external nonReentrant returns(bool){
+    function addPool(
+        address _lptoken,
+        address _gauge,
+        address _factory
+    ) external nonReentrant returns (bool) {
         //only manager
-        require(msg.sender==poolManager && !isShutdown, "!add");
+        require(msg.sender == poolManager && !isShutdown, "!add");
         //basic checks
-        require(_gauge != address(0) && _lptoken != address(0) && _factory != address(0),"!param");
+        require(
+            _gauge != address(0) &&
+                _lptoken != address(0) &&
+                _factory != address(0),
+            "!param"
+        );
         //crv check
         require(factoryCrv[_factory] != address(0), "!crv");
         //an unused pool
-        require(!activeMap[_gauge] && !activeMap[_lptoken],"already reg");
+        require(!activeMap[_gauge] && !activeMap[_lptoken], "already reg");
 
         //check that the given factory is indeed tied with the gauge
-        require(IPoolFactory(_factory).is_valid_gauge(_gauge),"!factory gauge");
+        require(
+            IPoolFactory(_factory).is_valid_gauge(_gauge),
+            "!factory gauge"
+        );
 
         //the next pool's pid
         uint256 pid = poolInfo.length;
 
         //create a reward contract for rewards
-        address newRewardPool = IRewardFactory(rewardFactory).CreateMainRewards(factoryCrv[_factory],_gauge,_lptoken,pid);
+        address newRewardPool = IRewardFactory(rewardFactory).CreateMainRewards(
+            factoryCrv[_factory],
+            _gauge,
+            _lptoken,
+            pid
+        );
 
         //add the new pool
         poolInfo.push(
@@ -210,7 +245,7 @@ contract Booster is ReentrancyGuard{
                 factory: _factory
             })
         );
-        
+
         //set gauge as being used
         activeMap[_gauge] = true;
         //also set the lp token as used
@@ -223,25 +258,23 @@ contract Booster is ReentrancyGuard{
     }
 
     //shutdown pool, only call from pool manager
-    function shutdownPool(uint256 _pid) external nonReentrant returns(bool){
-        require(msg.sender==poolManager, "!auth");
+    function shutdownPool(uint256 _pid) external nonReentrant returns (bool) {
+        require(msg.sender == poolManager, "!auth");
         return _shutdownPool(_pid);
     }
 
     //shutdown pool internal call
-    function _shutdownPool(uint256 _pid) internal returns(bool){
-        
+    function _shutdownPool(uint256 _pid) internal returns (bool) {
         PoolInfo storage pool = poolInfo[_pid];
-        if(pool.shutdown){
+        if (pool.shutdown) {
             //already shut down
             return false;
-        }  
+        }
 
         uint256 lpbalance = IERC20(pool.lptoken).balanceOf(address(this));
 
         //withdraw from gauge
-        try IStaker(staker).withdrawAll(pool.lptoken,pool.gauge){
-        }catch{}
+        try IStaker(staker).withdrawAll(pool.lptoken, pool.gauge) {} catch {}
 
         //lp difference
         lpbalance = IERC20(pool.lptoken).balanceOf(address(this)) - lpbalance;
@@ -262,16 +295,16 @@ contract Booster is ReentrancyGuard{
     //shutdown this contract.
     //  unstake and pull all lp tokens to this address
     //  only allow withdrawals
-    function shutdownSystem() external nonReentrant{
+    function shutdownSystem() external nonReentrant {
         require(msg.sender == owner, "!auth");
-        
+
         //remove pool manager while shutting down so that no new pools can be added during the loop
         address currentPoolManager = poolManager;
         poolManager = address(0);
 
         //shutdown all pools.
         //gas cost could grow too large to do all, in which case individual pools should be shutdown first
-        for(uint i=0; i < poolInfo.length; i++){
+        for (uint i = 0; i < poolInfo.length; i++) {
             _shutdownPool(i);
         }
 
@@ -282,10 +315,12 @@ contract Booster is ReentrancyGuard{
         poolManager = currentPoolManager;
     }
 
-
     //deposit lp tokens and stake
-    function deposit(uint256 _pid, uint256 _amount) public nonReentrant returns(bool){
-        require(!isShutdown,"shutdown");
+    function deposit(
+        uint256 _pid,
+        uint256 _amount
+    ) public nonReentrant returns (bool) {
+        require(!isShutdown, "shutdown");
         PoolInfo storage pool = poolInfo[_pid];
         require(pool.shutdown == false, "pool is closed");
 
@@ -295,22 +330,21 @@ contract Booster is ReentrancyGuard{
 
         //stake
         address gauge = pool.gauge;
-        require(gauge != address(0),"!gauge setting");
-        IStaker(staker).deposit(lptoken,gauge,_amount);
+        require(gauge != address(0), "!gauge setting");
+        IStaker(staker).deposit(lptoken, gauge, _amount);
 
         //mint reward tokens for user
-        IRewards(pool.rewards).stakeFor(msg.sender,_amount);
-        
-        
+        IRewards(pool.rewards).stakeFor(msg.sender, _amount);
+
         emit Deposited(msg.sender, _pid, _amount);
         return true;
     }
 
     //deposit all lp tokens and stake
-    function depositAll(uint256 _pid) external returns(bool){
+    function depositAll(uint256 _pid) external returns (bool) {
         address lptoken = poolInfo[_pid].lptoken;
         uint256 balance = IERC20(lptoken).balanceOf(msg.sender);
-        deposit(_pid,balance);
+        deposit(_pid, balance);
         return true;
     }
 
@@ -319,7 +353,6 @@ contract Booster is ReentrancyGuard{
         PoolInfo storage pool = poolInfo[_pid];
         address lptoken = pool.lptoken;
         address gauge = pool.gauge;
-
 
         //pull from gauge if not shutdown
         if (!pool.shutdown) {
@@ -332,8 +365,11 @@ contract Booster is ReentrancyGuard{
 
             //also check that the amount returned was correct
             //which will safegaurd pools that have been shutdown
-            require(IERC20(lptoken).balanceOf(address(this)) - lpbalance >= _amount, "withdraw amount fail");
-        }else{
+            require(
+                IERC20(lptoken).balanceOf(address(this)) - lpbalance >= _amount,
+                "withdraw amount fail"
+            );
+        } else {
             //if shutdown, tokens will be held in this contract
             //remove from shutdown balances. revert if not enough
             //would only revert if something was wrong with the pool
@@ -350,14 +386,18 @@ contract Booster is ReentrancyGuard{
     }
 
     //allow reward contracts to withdraw directly to user
-    function withdrawTo(uint256 _pid, uint256 _amount, address _to) external nonReentrant returns(bool){
+    function withdrawTo(
+        uint256 _pid,
+        uint256 _amount,
+        address _to
+    ) external nonReentrant returns (bool) {
         //require sender to be the reward contract for a given pool
         address rewardContract = poolInfo[_pid].rewards;
-        require(msg.sender == rewardContract,"!auth");
+        require(msg.sender == rewardContract, "!auth");
 
         //trust is on the reward contract to properly bookkeep deposit token balance
         //since the reward contract is now the deposit token itself
-        _withdraw(_pid,_amount,_to);
+        _withdraw(_pid, _amount, _to);
         return true;
     }
 
@@ -365,27 +405,40 @@ contract Booster is ReentrancyGuard{
     function claimCrv(uint256 _pid, address _gauge) external {
         //can only be called by the pool's reward contract
         address rewardContract = poolInfo[_pid].rewards;
-        require(msg.sender == rewardContract,"!auth");
+        require(msg.sender == rewardContract, "!auth");
 
         //only claim if the pool isnt shutdown, but no need to revert
-        if(!poolInfo[_pid].shutdown){
+        if (!poolInfo[_pid].shutdown) {
             //claim crv and redirect to the reward contract
             address _factory = poolInfo[_pid].factory;
-            IStaker(staker).claimCrv(factoryCrv[_factory], _factory, _gauge, rewardContract);
+            IStaker(staker).claimCrv(
+                factoryCrv[_factory],
+                _factory,
+                _gauge,
+                rewardContract
+            );
         }
     }
 
-    //set a gauge's redirect setting to claim extra rewards directly to a reward contract 
-    //instead of being pulled to the voterproxy/staker contract 
-    function setGaugeRedirect(address _gauge, address _rewards) internal returns(bool){
-        bytes memory data = abi.encodeWithSelector(bytes4(keccak256("set_rewards_receiver(address)")), _rewards);
+    //set a gauge's redirect setting to claim extra rewards directly to a reward contract
+    //instead of being pulled to the voterproxy/staker contract
+    function setGaugeRedirect(
+        address _gauge,
+        address _rewards
+    ) internal returns (bool) {
+        bytes memory data = abi.encodeWithSelector(
+            bytes4(keccak256("set_rewards_receiver(address)")),
+            _rewards
+        );
         _proxyCall(_gauge, data);
         return true;
     }
 
     //given an amount of crv, calculate fees
-    function calculatePlatformFees(uint256 _amount) external view returns(uint256){
-        uint256 _fees = _amount * fees / FEE_DENOMINATOR;
+    function calculatePlatformFees(
+        uint256 _amount
+    ) external view returns (uint256) {
+        uint256 _fees = (_amount * fees) / FEE_DENOMINATOR;
         return _fees;
     }
 }
