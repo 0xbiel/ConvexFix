@@ -7,55 +7,39 @@ interface IOwner {
     //booster
     // function setFactories(address _rfactory, address _sfactory, address _tfactory) external;
     function setRescueManager(address _arb) external;
-
     function setRewardManager(address _arb) external;
-
     function setRewardFactory(address _arb) external;
-
     function setFeeDeposit(address _arb) external;
-
     function setFees(uint256 _fees) external;
-
     function shutdownSystem() external;
-
     function shutdownPool(uint256 _pid) external;
-
     function setPendingOwner(address _po) external;
-
     function acceptPendingOwner() external;
-
     function setPoolManager(address _poolM) external;
 
-    function isShutdown() external view returns (bool);
-
-    function poolLength() external view returns (uint256);
-
-    function poolInfo(
-        uint256
-    ) external view returns (address, address, address, address, address, bool);
-
-    function owner() external view returns (address);
-
-    function rewardFactory() external view returns (address);
+    function isShutdown() external view returns(bool);
+    function poolLength() external view returns(uint256);
+    function poolInfo(uint256) external view returns(address,address,address,address,address,bool);
+    
+    function owner() external view returns(address);
+    function rewardFactory() external view returns(address);
 
     // reward factory
     function setImplementation(address _imp) external;
 
     //voter owner
     function retireBooster() external;
-
-    function operator() external view returns (address);
+    function operator() external view returns(address);
 }
 
 /*
 Immutable booster owner that makes sure booster was never changed during the shutdown system process and seal setRewardFactory
 Allow arbitrary calls to other contracts, but limit how calls are made to Booster
 */
-contract BoosterOwner is ReentrancyGuard {
-    address public constant booster =
-        address(0xF403C135812408BFbE8713b5A23a04b3D48AAE31);
-    address public constant voterproxy =
-        address(0x989AEb4d175e16225E39E87d0D97A3360524AD80);
+contract BoosterOwner is ReentrancyGuard{
+
+    address public constant booster = address(0xF403C135812408BFbE8713b5A23a04b3D48AAE31);
+    address public constant voterproxy = address(0x989AEb4d175e16225E39E87d0D97A3360524AD80);
     address public immutable voterproxyOwner;
 
     address public owner;
@@ -79,7 +63,7 @@ contract BoosterOwner is ReentrancyGuard {
         _;
     }
 
-    function transferOwnership(address _owner) external onlyOwner {
+    function transferOwnership(address _owner) external onlyOwner{
         pendingowner = _owner;
         emit TransferOwnership(_owner);
     }
@@ -91,12 +75,12 @@ contract BoosterOwner is ReentrancyGuard {
         emit AcceptedOwnership(owner);
     }
 
-    function sealOwnership() external onlyOwner {
+    function sealOwnership() external onlyOwner{
         isSealed = true;
         emit OwnershipSealed();
     }
 
-    function setBoosterOwner() external onlyOwner {
+    function setBoosterOwner() external onlyOwner{
         //allow reverting ownership until sealed
         require(!isSealed, "ownership sealed");
 
@@ -104,41 +88,41 @@ contract BoosterOwner is ReentrancyGuard {
         IOwner(booster).setPendingOwner(owner);
     }
 
-    function acceptPendingOwner() external onlyOwner {
+    function acceptPendingOwner() external onlyOwner{
         IOwner(booster).acceptPendingOwner();
     }
 
-    function setRescueManager(address _rescue) external onlyOwner nonReentrant {
+    function setRescueManager(address _rescue) external onlyOwner nonReentrant{
         IOwner(booster).setRescueManager(_rescue);
     }
 
-    function setRewardManager(address _rMng) external onlyOwner nonReentrant {
+    function setRewardManager(address _rMng) external onlyOwner nonReentrant{
         IOwner(booster).setRewardManager(_rMng);
     }
 
-    function setRewardFactory(address _rfac) external onlyOwner {
+    function setRewardFactory(address _rfac) external onlyOwner{
         //sealed
         // IOwner(booster).setRewardFactory(_rfac);
     }
 
-    function setFeeDeposit(address _fdep) external onlyOwner nonReentrant {
+    function setFeeDeposit(address _fdep) external onlyOwner nonReentrant{
         IOwner(booster).setFeeDeposit(_fdep);
     }
 
-    function setFees(uint256 _fees) external onlyOwner nonReentrant {
+    function setFees(uint256 _fees) external onlyOwner nonReentrant{
         IOwner(booster).setFees(_fees);
     }
 
-    function setPoolManager(address _poolM) external onlyOwner nonReentrant {
-        require(_poolM != address(0), "invalid address");
+    function setPoolManager(address _poolM) external onlyOwner nonReentrant{
+        require(_poolM != address(0),"invalid address");
         IOwner(booster).setPoolManager(_poolM);
     }
 
-    function shutdownPool(uint256 _pid) external onlyOwner nonReentrant {
+    function shutdownPool(uint256 _pid) external onlyOwner nonReentrant{
         IOwner(booster).shutdownPool(_pid);
     }
 
-    function shutdownSystem() external onlyOwner nonReentrant {
+    function shutdownSystem() external onlyOwner nonReentrant{
         uint256 poolCount = IOwner(booster).poolLength();
 
         //shutdown system
@@ -150,7 +134,7 @@ contract BoosterOwner is ReentrancyGuard {
 
         //make sure operator did not change during shutdown
         require(IOwner(voterproxy).operator() == booster, "booster changed");
-
+        
         //replace current voter operator
         IOwner(voterproxyOwner).retireBooster();
     }
@@ -164,17 +148,16 @@ contract BoosterOwner is ReentrancyGuard {
     ) external onlyOwner nonReentrant returns (bool, bytes memory) {
         require(_to != booster, "!invalid target");
 
-        (bool success, bytes memory result) = _to.call{value: _value}(_data);
+        (bool success, bytes memory result) = _to.call{value:_value}(_data);
 
         return (success, result);
     }
 
+
     // --- Helper functions for other systems, could also just use execute() ---
 
     //reward factory - set implementation
-    function setRewardImplementation(
-        address _imp
-    ) external onlyOwner nonReentrant {
+    function setRewardImplementation(address _imp) external onlyOwner nonReentrant{
         IOwner(IOwner(booster).rewardFactory()).setImplementation(_imp);
     }
 }

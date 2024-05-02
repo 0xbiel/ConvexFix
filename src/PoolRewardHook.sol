@@ -51,6 +51,7 @@ contract PoolRewardHook is IRewardHook {
         uint256 rewardLength = poolRewardList[msg.sender].length;
         for (uint256 i = 0; i < rewardLength; i++) {
             //use try-catch as this could be a 3rd party contract
+            //use try-catch as this could be a 3rd party contract
             (bool success, bytes memory data) = address(
                 poolRewardList[msg.sender][i]
             ).call(

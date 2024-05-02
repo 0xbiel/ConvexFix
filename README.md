@@ -1,4 +1,4 @@
-# <h1 align="center"> Convex Fix </h1>
+# <h1 align="center"> Fix faulty reward token can lock LP tokens </h1>
 
 **Fixed Convex Sidechain platform ConvexRewardPool and RewardManager**
 
