@@ -5,13 +5,11 @@ import "./interfaces/IBooster.sol";
 import "./interfaces/IRewards.sol";
 import "./interfaces/IRewardHook.sol";
 
-
 /*
     A Hook contract that pools call to perform extra actions when updating rewards
     (Example: claiming extra rewards from an outside contract)
 */
-contract PoolRewardHook is IRewardHook{
-
+contract PoolRewardHook is IRewardHook {
     address public immutable booster;
     mapping(address => address[]) public poolRewardList;
 
@@ -23,17 +21,17 @@ contract PoolRewardHook is IRewardHook{
     }
 
     //get reward manager role from booster to use as admin
-    function rewardManager() public view returns(address){
+    function rewardManager() public view returns (address) {
         return IBooster(booster).rewardManager();
     }
 
     //get reward contract list count for given pool/account
-    function poolRewardLength(address _pool) external view returns(uint256){
+    function poolRewardLength(address _pool) external view returns (uint256) {
         return poolRewardList[_pool].length;
     }
 
     //clear reward contract list for given pool/account
-    function clearPoolRewardList(address _pool) external{
+    function clearPoolRewardList(address _pool) external {
         require(msg.sender == rewardManager(), "!rmanager");
 
         delete poolRewardList[_pool];
@@ -41,7 +39,7 @@ contract PoolRewardHook is IRewardHook{
     }
 
     //add a reward contract to the list of contracts for a given pool/account
-    function addPoolReward(address _pool, address _rewardContract) external{
+    function addPoolReward(address _pool, address _rewardContract) external {
         require(msg.sender == rewardManager(), "!rmanager");
 
         poolRewardList[_pool].push(_rewardContract);
@@ -49,13 +47,23 @@ contract PoolRewardHook is IRewardHook{
     }
 
     //call all reward contracts to claim. (unguarded)
-    function onRewardClaim() external{
+    function onRewardClaim() external {
         uint256 rewardLength = poolRewardList[msg.sender].length;
-        for(uint256 i = 0; i < rewardLength; i++){
+        for (uint256 i = 0; i < rewardLength; i++) {
             //use try-catch as this could be a 3rd party contract
-            try IRewards(poolRewardList[msg.sender][i]).getReward(msg.sender){
-            }catch{}
+            (bool success, bytes memory data) = address(
+                poolRewardList[msg.sender][i]
+            ).call(
+                    abi.encodeWithSelector(
+                        IRewards(poolRewardList[msg.sender][i])
+                            .getReward
+                            .selector,
+                        msg.sender
+                    )
+                );
+            if (!success || (data.length > 0 && !abi.decode(data, (bool)))) {
+                return;
+            }
         }
     }
-
 }

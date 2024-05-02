@@ -10,7 +10,7 @@ import "./interfaces/IRewardManager.sol";
 import "./interfaces/ITokenMinter.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 /*
 This is the main contract which will have operator role on the VoterProxy.

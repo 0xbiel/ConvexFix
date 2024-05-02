@@ -9,7 +9,7 @@ import "./interfaces/IRewardManager.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 //claim and distribute gauge rewards without need of harvesters
 //more gas cost but no delayed rewards
@@ -144,15 +144,27 @@ contract ConvexRewardPool is ERC20, ReentrancyGuard {
             return;
         }
 
-        (bool success, bytes memory data) = _token.call(
-            abi.encodeWithSelector(
-                IERC20(_token).transfer.selector,
-                address(this),
-                0
-            )
-        );
-        if (!success || (data.length > 0 && !abi.decode(data, (bool)))) {
-            // Token transfer failed or did not return true, treat as non-compliant or non-existent token
+        uint32 size;
+
+        assembly {
+            size := extcodesize(_token)
+        }
+
+        if (size > 0) {
+            (bool success, ) = _token.call(
+                abi.encodeWithSelector(
+                    IERC20(_token).balanceOf.selector,
+                    address(this)
+                )
+            );
+            if (!success) {
+                // Token balance check failed, treat as non-compliant or non-existent token
+                _invalidateReward(_token);
+                return;
+            }
+        } else {
+            // Address is not a contract, treat as non-compliant or non-existent token
+            _invalidateReward(_token);
             return;
         }
 
@@ -177,7 +189,7 @@ contract ConvexRewardPool is ERC20, ReentrancyGuard {
                     0
                 )
             );
-            if (!_success || (_data.length > 0 && !abi.decode(data, (bool)))) {
+            if (!_success || (_data.length > 0 && !abi.decode(_data, (bool)))) {
                 // Token transfer failed or did not return true, treat as non-compliant or non-existent token
                 return;
             }
@@ -197,13 +209,7 @@ contract ConvexRewardPool is ERC20, ReentrancyGuard {
         }
     }
 
-    //allow invalidating a reward if the token causes trouble in calcRewardIntegral
-    function invalidateReward(address _token) public nonReentrant {
-        require(
-            IBooster(convexBooster).rewardManager() == msg.sender,
-            "!owner"
-        );
-
+    function _invalidateReward(address _token) internal {
         uint256 index = rewardMap[_token];
         if (index > 0) {
             //index is registered rewards minus one
@@ -213,6 +219,16 @@ contract ConvexRewardPool is ERC20, ReentrancyGuard {
             reward.reward_token = address(0);
             emit RewardInvalidated(_token);
         }
+    }
+
+    //allow invalidating a reward if the token causes trouble in calcRewardIntegral
+    function invalidateReward(address _token) public nonReentrant {
+        require(
+            IBooster(convexBooster).rewardManager() == msg.sender,
+            "!owner"
+        );
+
+        _invalidateReward(_token);
     }
 
     //set a reward hook that calls an outside contract to pull external rewards
