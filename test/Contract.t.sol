@@ -32,12 +32,18 @@ contract TestContract is Test {
 
     address public _factory = 0xabC000d88f23Bb45525E447528DBF656A9D55bf5;
 
+    /* We set the test enviroment. */
     function setUp() public {
-        arbitrumFork = vm.createSelectFork("https://arb1.arbitrum.io/rpc");
+        /* We create the fork and roll it to an appropiate time */
+        arbitrumFork = vm.createSelectFork("https://arbitrum-mainnet.infura.io/v3/260337452859471ba19c5fc0f1175715");
+        vm.rollFork(205_368_573);
+
+        /* We set some of the variables */
         _crv = IERC20(0x11cDb42B0EB46D95f990BeDD4695A6e3fA034978);
         _lptoken = IERC20(0xF7Fed8Ae0c5B78c19Aadd68b700696933B0Cefd9);
         booster = Booster(_convexBooster);
 
+        /* We create a new rewardFactory */
         vm.startPrank(0x2CA7759dcE155e15dF9cDBd8322C8Eb2934c5558);
         poolManager = PoolManager(0x3CeeAd93972703a4668EcD9FcAB5b99C8fa39ae3);
         rewardFactory = new RewardFactory(
@@ -50,14 +56,17 @@ contract TestContract is Test {
         rewardManager = RewardManager(booster.rewardManager());
         vm.stopPrank();
 
+        /* We change the rewardManager to a new reward hook */
         vm.startPrank(rewardManager.owner());
         rewardHook = new PoolRewardHook(_convexBooster);
         rewardManager.setPoolHook(address(rewardHook));
         vm.stopPrank();
 
+        /* We change the implementation of the reward factory*/
         vm.prank(address(booster.owner()));
         rewardFactory.setImplementation(address(template));
 
+        /* We remove the broken pool and add a new pool to the reward factory */
         vm.startPrank(0x947B7742C403f20e5FaCcDAc5E092C943E7D0277);
         poolManager.shutdownPool(15);
         poolManager.addPool(_curveGauge, _factory);
@@ -65,21 +74,32 @@ contract TestContract is Test {
         convexRewardPool = ConvexRewardPool(rewards);
     }
 
+    /* Test that the pool was correctly set */
     function testSetPool() public view {
         assertEq(booster.poolLength(), 29);
     }
 
+     /* Test that you can still deposit */
     function testDeposit() public {
         vm.startPrank(address(1));
-        deal(address(_lptoken), address(address(1)), 10 ether);
+        deal(address(_lptoken), address(1), 10 ether);
         IERC20(_lptoken).approve(
             address(booster),
             IERC20(_lptoken).balanceOf(address(1))
         );
         booster.depositAll(28);
+        assertEq(IERC20(_lptoken).balanceOf(address(1)), 0);
     }
 
     function testClaimRewards() public {
+        vm.startPrank(address(1));
+        deal(address(_lptoken), address(1), 10 ether);
+        IERC20(_lptoken).approve(
+            address(booster),
+            IERC20(_lptoken).balanceOf(address(1))
+        );
+        booster.depositAll(28);
+        assertEq(IERC20(_lptoken).balanceOf(address(1)), 0);
         vm.warp(block.number + 1 days);
         convexRewardPool.getReward(address(1));
     }
